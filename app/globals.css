@@ -1,3 +1,4 @@
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap');
 @import url('https://fonts.googleapis.com/css2?family=Manrope:wght@800&display=swap');
 :root {
   --bg: #f7f7f8;
@@ -155,3 +156,79 @@ main { overflow-wrap: anywhere; }
   .sponsors { margin: 16px 16px 32px; flex-direction: column; text-align: center; }
   .sponsors-logos { justify-content: center; }
 }
+
+/* ===== Brand: Prompt Anything x Mel (matches the hackathon deck) =====
+   Paper with a dot grid, Space Grotesk headlines, Inter body, violet actions,
+   lavender highlights, ink bands, JetBrains Mono labels. Later rules win, so this
+   block restyles the app without touching the classes above it. */
+:root {
+  --bg: #FCFCFD;
+  --card: #FFFFFF;
+  --ink: #0D0B19;
+  --muted: #56545F;
+  --line: #E3E3ED;
+  --accent: #4B36D9;
+  --accent-soft: #EFECFE;
+  --lavender: #E0DAFB;
+  --zombie: #0D0B19;
+  --danger: #DC2828;
+  --radius: 16px;
+  font-family: 'Inter', system-ui, -apple-system, "Segoe UI", sans-serif;
+  color: var(--ink);
+  background: var(--bg);
+}
+
+body {
+  background-color: var(--bg);
+  background-image: radial-gradient(rgba(13, 11, 25, .08) 1px, transparent 1.2px);
+  background-size: 24px 24px;
+}
+
+h1, h2, h3, .nav .brand {
+  font-family: 'Space Grotesk', 'Inter', sans-serif;
+  letter-spacing: -0.02em;
+}
+h1 { font-size: 34px; font-weight: 700; letter-spacing: -0.03em; }
+h2 { font-weight: 700; }
+
+.zombie-bar {
+  background: var(--ink);
+  color: #E0DAFB;
+  font: 600 12px/1.4 'JetBrains Mono', ui-monospace, monospace;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 8px 16px;
+}
+
+.nav { background: rgba(255, 255, 255, .92); border-bottom: 1px solid var(--line); }
+.nav .brand { font-size: 20px; font-weight: 700; }
+.nav a:not(.brand) { font-weight: 500; }
+
+.card {
+  border-radius: 20px;
+  box-shadow: 0 8px 24px rgba(10, 20, 32, .06);
+}
+
+button, .btn {
+  border-radius: 12px;
+  font-family: 'Inter', sans-serif;
+  font-weight: 600;
+}
+button:not(.ghost):not(:disabled):hover, .btn:not(.ghost):hover { background: #3B27B0; opacity: 1; }
+button.ghost, .btn.ghost { background: #FFFFFF; }
+
+input, select, textarea { border-radius: 12px; }
+input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-visible, a:focus-visible {
+  outline: 3px solid var(--lavender);
+  outline-offset: 2px;
+}
+
+table { border-radius: 16px; border: 1px solid var(--line); }
+th {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+}
+
+.pill { background: var(--lavender); color: #3F2FB0; font-weight: 600; }
+.sub { color: var(--muted); }
