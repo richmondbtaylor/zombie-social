@@ -11,3 +11,6 @@ data/db.json
 
 .vercel
 .env*
+
+.vercel
+.env*
