@@ -1,0 +1,38 @@
+{
+  "members": [
+    { "id": "m1", "name": "Maya Brooks", "role": "owner", "email": "maya@harborpine.example" },
+    { "id": "m2", "name": "Dev Patel", "role": "editor", "email": "dev@harborpine.example" },
+    { "id": "m3", "name": "Lena Ortiz", "role": "viewer", "email": "lena@harborpine.example" }
+  ],
+  "channels": [
+    { "id": "c1", "platform": "instagram", "name": "Harbor & Pine Coffee", "handle": "@harborpine.coffee", "followers": 8420, "connected": true, "accessToken": "fake-ig-access-token-1111", "refreshToken": "fake-ig-refresh-token-1111" },
+    { "id": "c2", "platform": "linkedin", "name": "Harbor & Pine Coffee", "handle": "harbor-pine-coffee", "followers": 2310, "connected": true, "accessToken": "fake-li-access-token-2222", "refreshToken": "fake-li-refresh-token-2222" },
+    { "id": "c3", "platform": "x", "name": "Harbor & Pine", "handle": "@harborpine", "followers": 1560, "connected": true, "accessToken": "fake-x-access-token-3333", "refreshToken": "fake-x-refresh-token-3333" },
+    { "id": "c4", "platform": "tiktok", "name": "Harbor & Pine Coffee", "handle": "@harborpinecoffee", "followers": 5120, "connected": true, "accessToken": "fake-tt-access-token-4444", "refreshToken": "fake-tt-refresh-token-4444" },
+    { "id": "c5", "platform": "facebook", "name": "Harbor & Pine Coffee", "handle": "HarborPineCoffee", "followers": 3890, "connected": true, "accessToken": "fake-fb-access-token-5555", "refreshToken": "fake-fb-refresh-token-5555" }
+  ],
+  "posts": [
+    { "id": "1001", "text": "New fall roast is here. Notes of cocoa, orange peel and a little smoke. Come try a free cup this weekend.", "channelIds": ["c1", "c5"], "scheduledAt": "2026-10-26T09:00", "status": "published", "imageUrl": "/quill.png", "sponsored": false, "createdBy": "m1", "createdAt": "2026-10-20T15:10:00Z",
+      "results": [
+        { "channelId": "c1", "impressions": 6120, "likes": 412, "comments": 38, "shares": 51, "clicks": 140 },
+        { "channelId": "c5", "impressions": 2980, "likes": 133, "comments": 17, "shares": 22, "clicks": 64 } ] },
+    { "id": "1002", "text": "Three things we learned from roasting 4,000 pounds of beans this year. 1) Small batches taste better. 2) Slow cooling matters. 3) Fresh beats fancy. Read more on the blog: https://harborpine.example/blog/roasting-lessons", "channelIds": ["c2"], "scheduledAt": "2026-10-27T12:30", "status": "published", "imageUrl": "", "sponsored": false, "createdBy": "m2", "createdAt": "2026-10-21T10:00:00Z",
+      "results": [ { "channelId": "c2", "impressions": 3340, "likes": 121, "comments": 14, "shares": 19, "clicks": 88 } ] },
+    { "id": "1003", "text": "Monday mood: dark roast, no talking until 9.", "channelIds": ["c3", "c5"], "scheduledAt": "2026-10-27T17:00", "status": "published", "imageUrl": "", "sponsored": false, "createdBy": "m2", "createdAt": "2026-10-22T09:30:00Z",
+      "results": [
+        { "channelId": "c3", "impressions": 1480, "likes": 47, "comments": 6, "shares": 9, "clicks": 12 },
+        { "channelId": "c5", "impressions": 2210, "likes": 96, "comments": 11, "shares": 7, "clicks": 20 } ] },
+    { "id": "1004", "text": "Latte art in 15 seconds. Watch the whole pour.", "channelIds": ["c1", "c4"], "scheduledAt": "2026-10-28T10:00", "status": "published", "imageUrl": "", "sponsored": false, "createdBy": "m1", "createdAt": "2026-10-23T13:45:00Z",
+      "results": [
+        { "channelId": "c1", "impressions": 5230, "likes": 388, "comments": 29, "shares": 77, "clicks": 31 },
+        { "channelId": "c4", "impressions": 14800, "likes": 1260, "comments": 84, "shares": 210, "clicks": 96 } ] },
+    { "id": "1005", "text": "Last call for our pumpkin cold brew. Gone after Halloween.", "channelIds": ["c3"], "scheduledAt": "2026-10-27T08:00", "status": "scheduled", "imageUrl": "", "sponsored": false, "createdBy": "m2", "createdAt": "2026-10-24T11:20:00Z" },
+    { "id": "1006", "text": "Cozy Thursday: we are open until 8 tonight. Bring a book, we will bring the coffee.", "channelIds": ["c1", "c5"], "scheduledAt": "2026-10-29T18:00", "status": "scheduled", "imageUrl": "", "sponsored": false, "createdBy": "m1", "createdAt": "2026-10-25T08:15:00Z" },
+    { "id": "1007", "text": "We are hiring a weekend barista in Miami. Paid training, tips, free coffee. Apply here: https://harborpine.example/jobs", "channelIds": ["c2", "c3"], "scheduledAt": "2026-10-30T09:30", "status": "scheduled", "imageUrl": "", "sponsored": false, "createdBy": "m1", "createdAt": "2026-10-25T08:40:00Z" },
+    { "id": "1008", "text": "Spooky season sip: our Halloween blend, made with the team at Moonlit Mugs. Use code PINE10 for 10% off.", "channelIds": ["c1", "c4"], "scheduledAt": "2026-10-31T20:00", "status": "scheduled", "imageUrl": "/quill.png", "sponsored": true, "createdBy": "m2", "createdAt": "2026-10-26T14:00:00Z" },
+    { "id": "1009", "text": "November special: buy any bag of beans, get a free pour-over lesson on Saturday.", "channelIds": ["c5"], "scheduledAt": "2026-11-02T10:00", "status": "scheduled", "imageUrl": "", "sponsored": false, "createdBy": "m1", "createdAt": "2026-10-27T16:05:00Z" },
+    { "id": "1010", "text": "Draft: behind the scenes at the roastery, plus a thank you to our regulars.", "channelIds": ["c3", "c2"], "scheduledAt": null, "status": "draft", "imageUrl": "", "sponsored": false, "createdBy": "m2", "createdAt": "2026-10-27T17:30:00Z" },
+    { "id": "1011", "text": "Draft: holiday gift boxes are coming. Which roast should be in the box?", "channelIds": ["c1"], "scheduledAt": null, "status": "draft", "imageUrl": "", "sponsored": false, "createdBy": "m1", "createdAt": "2026-10-28T09:10:00Z" },
+    { "id": "1012", "text": "How we pick our beans, in 30 seconds.", "channelIds": ["c4"], "scheduledAt": "2026-10-28T15:00", "status": "failed", "imageUrl": "", "sponsored": false, "createdBy": "m2", "createdAt": "2026-10-26T12:00:00Z" }
+  ]
+}
