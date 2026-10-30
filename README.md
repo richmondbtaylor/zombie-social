@@ -1,53 +1,71 @@
 # Zombie Social
 
-> A half-built copy of **Buffer / Later / Hootsuite**. It runs, it kind of works, and it is not ready for real users.
-> Your job tonight: bring it back to life.
+> A multi-tenant social media scheduling SaaS — Buffer / Later / Hootsuite alternative.
 
 **Replaces:** Buffer, Later and Hootsuite (Buffer is from $5/month per channel)
 
-**Live demo:** https://zombie-social.vercel.app (a shared demo: data resets whenever the server restarts)
-<!-- Price verified 2026-10-29 at https://buffer.com/pricing : Essentials plan is $5/month for 1 channel (monthly billing), Team is $10/month for 1 channel, billed per channel. Later's page only showed yearly-billed prices ($18.75/month Starter) and no monthly price, so it is not used. -->
+## Architecture
 
-## Run it (2 minutes)
+- **Framework:** Next.js 16 (App Router) + React 19 + TypeScript 5
+- **Database:** PostgreSQL via Supabase (row-level security, multi-tenant workspaces)
+- **Auth:** Supabase Auth (magic links + OAuth) with RBAC (owner / editor / viewer)
+- **Storage:** Supabase Storage (pre-signed uploads, Sharp image derivatives)
+- **Billing:** Stripe Checkout (metered by channel count) with webhook-driven plan enforcement
+- **Scheduling:** Vercel Cron (1-min interval) with claim-based locking and exponential backoff
+- **Email:** Resend (invite emails, failure alerts)
+- **Encryption:** AES-256-GCM for OAuth tokens at rest
 
-You need [Node.js 20 or newer](https://nodejs.org).
+## Setup
 
 ```bash
+# 1. Clone and install
+git clone https://github.com/richmondbtaylor/zombie-social.git
+cd zombie-social
 npm install
+
+# 2. Configure environment
+cp .env.example .env.local
+# Fill in all required values (Supabase, Stripe, OAuth, etc.)
+
+# 3. Run the database migration
+# Copy supabase/migrations/001_schema.sql into your Supabase SQL Editor and execute it
+
+# 4. Seed the database (optional, for initial demo data)
+npm run seed
+
+# 5. Start the dev server
 npm run dev
 ```
 
 Open http://localhost:3111.
 
-## What works
+## What's included
 
-- A "Pretend to be" dropdown in the top bar picks who you are (there are no real accounts). Three team members: an owner, an editor and a viewer.
-- Five fake channels: Instagram, LinkedIn, X, TikTok and Facebook. They are only names and handles in `data/seed.json`.
-- Composer: write text, pick channels, pick a date and time, add an image URL, mark a post as sponsored. A character counter shows each channel's limit.
-- Queue: every scheduled, published and failed post.
-- Week calendar: seven days in a CSS grid, with colored dots for the channels. Use Previous week and Next week.
-- Drafts: save a draft, then pick a time and schedule it later.
-- Analytics: totals and a table per channel. The numbers are fake and come from the seed file.
-- 12 fake posts across two weeks (published, scheduled, drafts and one failed).
-- Pricing page (Stripe is not connected).
+- **Multi-tenant workspaces** with member roles (owner / editor / viewer)
+- **Supabase Auth** — magic links and OAuth sign-in, no more "Pretend to be" dropdown
+- **Real OAuth** — connect LinkedIn and X accounts with proper token encryption and revocation
+- **Post scheduling** — create, edit, schedule, submit for review, approve/reject
+- **Batch publishing** — Vercel Cron worker with claim-based locking, stale-post detection, per-channel spacing, and exponential backoff (1/5/15 min)
+- **Character counting** — platform-aware (X counts links as 23 chars), server-enforced limits
+- **Duplicate detection** — SHA-256 hash check within 24-hour rolling window
+- **Sponsored post compliance** — #ad auto-appended, platform branded-content flags passed
+- **Image upload** — Supabase Storage with magic-byte validation, 5 MB cap, Sharp derivatives (1:1, 9:16, 16:9)
+- **Analytics** — engagement rate ÷ impressions (not followers), per-post aggregation across all channels, CSV export
+- **Stripe billing** — Checkout, Customer Portal, webhook-driven plan enforcement, 3-day grace period, channel freezing on downgrade
+- **RBAC** — viewers cannot create, edit, delete, schedule, publish, invite, or export; owners approve/reject
+- **Audit log** — every create, edit, publish, delete, connect, disconnect, invite, and billing event
+- **RFC 7807 errors** — structured JSON (`code`, `title`, `detail`) with correct HTTP status codes
 
-Try it: open Compose, pick Instagram and X, type a long post and watch the two counters. Pick a time and press Schedule, then look for it in the Queue and on the Calendar.
+## Deployment
 
-## What's broken
+Deploy to Vercel with the Supabase integration:
 
-See [ZOMBIE.md](ZOMBIE.md). That's the to-do list for the night. "Connect account" and "Publish now" give a 501, and nothing ever posts at the scheduled time.
+```bash
+vercel --prod
+```
 
-## How we build tonight
-
-- **Mel** ([openmel.dev](https://openmel.dev)) does the building. Open this folder in Mel and give it tasks from ZOMBIE.md.
-- **Prompt Anything** ([promptanything.io](https://www.promptanything.io)) writes the prompts. Use it inside Mel for features, agents, customer success flows, code fixes and reading this repo.
-- **MEL.md** in this folder tells Mel's agents what this project is and how to work on it.
-
-## Submit
-
-Fork this repo, push your work, and send your link through the submission form before the deadline.
-Many people can pick the same app. The one that actually works wins.
+The `vercel.json` configures a 1-minute cron for `/api/cron/publish`. Set all env vars in the Vercel dashboard.
 
 ## License
 
-MIT. Use it, ship it, share it.
+MIT.

@@ -1,62 +1,172 @@
 "use client";
 import { useState } from "react";
-import type { Channel, Post } from "@/lib/db";
+import type { Channel, MemberRole, Post } from "@/lib/db";
 import { PLATFORM_NAMES } from "@/lib/channels";
+import { useRouter } from "next/navigation";
 
 export function fmtTime(s: string | null): string {
   if (!s) return "No date yet";
   return new Date(s).toLocaleString([], { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 }
 
-// One post in the queue or the drafts list.
-export default function PostRow({ post, channels, onChange }: { post: Post; channels: Channel[]; onChange: () => void }) {
+interface Props { post: Post; channels: Channel[]; role: MemberRole; onChange: () => void }
+
+export default function PostRow({ post, channels, role, onChange }: Props) {
+  const router = useRouter();
   const [msg, setMsg] = useState("");
-  const [when, setWhen] = useState(post.scheduledAt ?? "");
+  const [when, setWhen] = useState(post.scheduledAtUtc ?? "");
+  const [showError, setShowError] = useState(false);
+  const [rewrite, setRewrite] = useState<{ text: string; tone: string } | null>(null);
+  const [rewriting, setRewriting] = useState(false);
+
+  const canEdit = role === "owner" || role === "editor";
   const names = post.channelIds.map((id) => channels.find((c) => c.id === id)).filter(Boolean) as Channel[];
+  const failedResults = (post.results ?? []).filter((r) => r.status === "failed" || r.status === "rate_limited");
 
   async function publishNow() {
     setMsg("");
     const res = await fetch(`/api/posts/${post.id}/publish`, { method: "POST" });
-    const data = await res.json();
-    setMsg(data.error ?? "Published.");
+    const data = await res.json().catch(() => ({}));
+    setMsg(res.ok ? (data.status ?? "Published.") : (data.detail ?? "Publish failed."));
     onChange();
   }
+
   async function remove() {
     await fetch(`/api/posts/${post.id}`, { method: "DELETE" });
     onChange();
   }
+
   async function schedule() {
     if (!when) { setMsg("Pick a date and time first."); return; }
-    await fetch(`/api/posts/${post.id}`, {
+    const res = await fetch(`/api/posts/${post.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status: "scheduled", scheduledAt: when }),
+      body: JSON.stringify({ status: "scheduled", scheduledAt: when, version: post.version }),
     });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) setMsg(data.detail ?? "Could not schedule.");
+    onChange();
+  }
+
+  async function retry() {
+    const res = await fetch(`/api/posts/${post.id}/publish`, { method: "POST" });
+    const data = await res.json().catch(() => ({}));
+    setMsg(res.ok ? (data.status ?? "Retried.") : (data.detail ?? "Retry failed."));
+    onChange();
+  }
+
+  async function submitReview() {
+    const res = await fetch(`/api/posts/${post.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: "pending_review", version: post.version }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) setMsg(data.detail ?? "Could not submit for review.");
+    onChange();
+  }
+
+  function edit() {
+    router.push(`/compose?edit=${post.id}`);
+  }
+
+  async function rewriteTone(tone: "conversational" | "informal" | "professional") {
+    setMsg("");
+    setRewriting(true);
+    try {
+      const res = await fetch("/api/ai/repost", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ postId: post.id, tone }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) { setMsg(data.detail ?? "Could not rewrite."); return; }
+      setRewrite({ text: data.text, tone });
+    } finally {
+      setRewriting(false);
+    }
+  }
+
+  async function applyRewrite() {
+    if (!rewrite) return;
+    const res = await fetch(`/api/posts/${post.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: rewrite.text, version: post.version }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) { setMsg(data.detail ?? "Could not save the rewrite."); return; }
+    setRewrite(null);
+    setMsg("Rewritten.");
     onChange();
   }
 
   return (
     <div className="card stack">
       <div className="row" style={{ justifyContent: "space-between" }}>
-        <span className="muted small">{fmtTime(post.scheduledAt)}</span>
+        <span className="muted small">{fmtTime(post.scheduledAtUtc)}</span>
         <span className={`pill status-${post.status}`}>{post.status}</span>
       </div>
-      <div>{post.text}</div>
+      {!rewrite && <div>{post.text}</div>}
+      {rewrite && (
+        <div className="card" style={{ background: "var(--lavender)" }}>
+          <div className="muted small" style={{ marginBottom: 6 }}>AI rewrite · {rewrite.tone}</div>
+          <div style={{ whiteSpace: "pre-wrap" }}>{rewrite.text}</div>
+          <div className="row" style={{ marginTop: 8 }}>
+            <button className="small-btn" onClick={applyRewrite}>Use this</button>
+            <button className="small-btn ghost" onClick={() => setRewrite(null)}>Discard</button>
+          </div>
+        </div>
+      )}
       {post.imageUrl && <div className="muted small">Image: {post.imageUrl}</div>}
       <div className="row">
         {names.map((c) => <span key={c.id} className="pill">{PLATFORM_NAMES[c.platform]}</span>)}
         {post.sponsored && <span className="pill status-sponsored">sponsored</span>}
+        {post.status === "approved" && <span className="pill" onClick={edit} style={{ cursor: "pointer" }}>Re-approval required</span>}
       </div>
-      <div className="row">
-        {post.status === "draft" && (
-          <>
-            <input type="datetime-local" value={when} onChange={(e) => setWhen(e.target.value)} style={{ width: "auto" }} />
-            <button className="small-btn" onClick={schedule}>Schedule</button>
-          </>
-        )}
-        {post.status === "scheduled" && <button className="small-btn" onClick={publishNow}>Publish now</button>}
-        <button className="small-btn ghost" onClick={remove}>Delete</button>
-      </div>
+
+      {failedResults.length > 0 && (
+        <div className="error-badge" onClick={() => setShowError((s) => !s)}>
+          {failedResults.length} channel error{failedResults.length > 1 ? "s" : ""} {showError ? "▾" : "▸"}
+        </div>
+      )}
+      {showError && failedResults.map((r) => (
+        <div key={r.channelId} className="error small">{channels.find((c) => c.id === r.channelId)?.handle}: {r.errorMessage}</div>
+      ))}
+
+      {canEdit && (
+        <div className="row">
+          {post.status === "draft" && (
+            <>
+              <input type="datetime-local" value={when} onChange={(e) => setWhen(e.target.value)} style={{ width: "auto" }} />
+              <button className="small-btn" onClick={schedule}>Schedule</button>
+            </>
+          )}
+          {post.status === "scheduled" && <button className="small-btn" onClick={publishNow}>Publish now</button>}
+          {post.status === "failed" && (
+            <>
+              <button className="small-btn" onClick={retry}>Retry</button>
+              <button className="small-btn ghost" onClick={edit}>Edit</button>
+            </>
+          )}
+          {post.status === "draft" && role === "editor" && (
+            <button className="small-btn ghost" onClick={submitReview}>Submit for review</button>
+          )}
+          {!rewrite && (
+            <>
+              <button className="small-btn ghost" disabled={rewriting} onClick={() => rewriteTone("conversational")}>💬 Rewrite</button>
+              <button className="small-btn ghost" disabled={rewriting} onClick={() => rewriteTone("informal")}>😄</button>
+              <button className="small-btn ghost" disabled={rewriting} onClick={() => rewriteTone("professional")}>👔</button>
+            </>
+          )}
+          {["draft", "scheduled", "failed", "rejected"].includes(post.status) && (
+            <button className="small-btn ghost" onClick={remove}>Delete</button>
+          )}
+        </div>
+      )}
+      {!canEdit && (
+        <div className="muted small">View-only access — actions hidden.</div>
+      )}
       {msg && <div className="error">{msg}</div>}
     </div>
   );

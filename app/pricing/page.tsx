@@ -1,18 +1,31 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useMe } from "@/lib/useMe";
+import { canManageBilling } from "@/lib/rbac";
+import { FREE_TIER_CHANNELS } from "@/lib/config";
 
-// ZOMBIE: no prices yet. Pick your prices, create matching Prices in Stripe (test mode),
-// and show them here. Idea: charge per workspace, not per channel.
 const PLANS = [
-  { id: "creator", name: "Creator", price: "Set your price", perks: ["5 channels", "Queue and calendar", "Basic analytics"] },
-  { id: "team", name: "Team", price: "Set your price", perks: ["Unlimited channels", "Team members and roles", "Approvals and full analytics"] },
+  { id: "free", name: "Free", price: "$0/mo", perks: [`${FREE_TIER_CHANNELS} channels`, "Queue and calendar", "Basic analytics"] },
+  { id: "creator", name: "Creator", price: "$12/mo", perks: ["10 channels", "Queue and calendar", "Full analytics", "Export CSV"] },
+  { id: "team", name: "Team", price: "$29/mo", perks: ["Unlimited channels", "Team members and roles", "Approvals and full analytics", "Priority support"] },
 ];
 
 export default function PricingPage() {
+  const me = useMe();
   const [error, setError] = useState("");
+  const [portalUrl, setPortalUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (me && canManageBilling(me.role)) {
+      fetch("/api/billing/portal").then((r) => r.ok ? r.json() : null).then((d) => {
+        if (d?.url) setPortalUrl(d.url);
+      });
+    }
+  }, [me]);
 
   async function buy(plan: string) {
     setError("");
+    if (plan === "free") return;
     const res = await fetch("/api/checkout", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -20,7 +33,7 @@ export default function PricingPage() {
     });
     const data = await res.json();
     if (data.url) window.location.href = data.url;
-    else setError(data.error ?? "Checkout failed.");
+    else setError(data.detail ?? data.error ?? "Checkout failed.");
   }
 
   return (
@@ -28,8 +41,11 @@ export default function PricingPage() {
       <div className="page-head">
         <div>
           <h1>Pricing</h1>
-          <p className="sub">Cheaper than the tool you&apos;re used to. Once Stripe works.</p>
+          <p className="sub">Choose the plan that fits your workspace.</p>
         </div>
+        {portalUrl && (
+          <a href={portalUrl} className="btn ghost">Manage billing</a>
+        )}
       </div>
       <div className="grid">
         {PLANS.map((p) => (
@@ -39,7 +55,10 @@ export default function PricingPage() {
             <ul className="muted" style={{ margin: 0, paddingLeft: 18 }}>
               {p.perks.map((perk) => <li key={perk}>{perk}</li>)}
             </ul>
-            <button onClick={() => buy(p.id)}>Buy {p.name}</button>
+            {p.id !== "free" && me?.role !== "viewer" && (
+              <button onClick={() => buy(p.id)}>Buy {p.name}</button>
+            )}
+            {p.id === "free" && <div className="muted small">Current plan or default</div>}
           </div>
         ))}
       </div>

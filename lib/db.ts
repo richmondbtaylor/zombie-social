@@ -1,50 +1,151 @@
-// ZOMBIE: this "database" is a JSON file on disk. It works on your laptop and
-// dies on any real host (Vercel's disk is read-only and wiped on every deploy).
-// Replace it with a real database (Supabase, Neon, Postgres...) before you ship.
-import { promises as fs } from "fs";
-import path from "path";
-import seed from "@/data/seed.json";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+
+// ─── Types ────────────────────────────────────────────────────────────────────
 
 export type Platform = "instagram" | "linkedin" | "x" | "tiktok" | "facebook";
-export type Member = { id: string; name: string; role: "owner" | "editor" | "viewer"; email: string };
-export type Channel = {
-  id: string; platform: Platform; name: string; handle: string; followers: number; connected: boolean;
-  // ZOMBIE: access and refresh tokens sit in plain JSON on disk (and the API hands them out).
-  // Encrypt them at rest, keep them on the server only, and make them revocable.
-  accessToken: string; refreshToken: string;
-};
-export type Result = { channelId: string; impressions: number; likes: number; comments: number; shares: number; clicks: number };
-export type Post = {
-  id: string; text: string; channelIds: string[];
-  // Local wall clock time like "2026-10-30T14:00". No time zone is saved with it.
-  scheduledAt: string | null;
-  status: "draft" | "scheduled" | "published" | "failed";
-  imageUrl: string; sponsored: boolean; createdBy: string; createdAt: string;
-  results?: Result[];
-};
-export type Db = { members: Member[]; channels: Channel[]; posts: Post[] };
 
-// ZOMBIE: the live site (Vercel) can't write to the app folder, so it writes to /tmp instead.
-// /tmp is wiped whenever the server restarts, and each server copy keeps its own. Use a real database.
-const DB_PATH = process.env.VERCEL
-  ? path.join("/tmp", "db.json")
-  : path.join(process.cwd(), "data", "db.json");
+export type MemberRole = "owner" | "editor" | "viewer";
 
-export async function readDb(): Promise<Db> {
-  try {
-    return JSON.parse(await fs.readFile(DB_PATH, "utf8")) as Db;
-  } catch {
-    const fresh = structuredClone(seed) as Db;
-    await writeDb(fresh);
-    return fresh;
+export type PostStatus =
+  | "draft"
+  | "pending_review"
+  | "approved"
+  | "rejected"
+  | "scheduled"
+  | "publishing"
+  | "processing"
+  | "published"
+  | "partially_published"
+  | "partially_failed"
+  | "failed";
+
+export interface Workspace {
+  id: string;
+  name: string;
+  timezone: string;
+  stripeCustomerId: string | null;
+  stripeSubscriptionId: string | null;
+  plan: "free" | "creator" | "team";
+  pastDue: boolean;
+  pastDueAt: string | null;
+}
+
+export interface Member {
+  id: string;
+  workspaceId: string;
+  userId: string;
+  name: string;
+  email: string;
+  role: MemberRole;
+  deactivated: boolean;
+}
+
+export interface Channel {
+  id: string;
+  workspaceId: string;
+  platform: Platform;
+  name: string;
+  handle: string;
+  followers: number;
+  connected: boolean;
+  frozen: boolean;
+  accessTokenEnc: string;
+  refreshTokenEnc: string;
+  tokenExpiresAt: string | null;
+  lastRateLimitReset: string | null;
+}
+
+export type ChannelPublic = Omit<Channel, "accessTokenEnc" | "refreshTokenEnc">;
+
+export interface PostResult {
+  id: string;
+  postId: string;
+  channelId: string;
+  externalPostId: string | null;
+  postUrl: string | null;
+  status: "pending" | "success" | "failed" | "rate_limited";
+  errorMessage: string | null;
+  retryCount: number;
+  nextRetryAt: string | null;
+  impressions: number;
+  likes: number;
+  comments: number;
+  shares: number;
+  clicks: number;
+  extraMetrics: Record<string, unknown> | null;
+  syncedAt: string | null;
+}
+
+export interface PostComment {
+  authorId: string;
+  timestamp: string;
+  body: string;
+}
+
+export interface Post {
+  id: string;
+  workspaceId: string;
+  text: string;
+  channelIds: string[];
+  scheduledAtUtc: string | null;
+  timezone: string;
+  status: PostStatus;
+  imageUrl: string;
+  videoUrl: string | null;
+  sponsored: boolean;
+  inReview: boolean;
+  lockedAt: string | null;
+  version: number;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+  results?: PostResult[];
+  comments?: PostComment[];
+}
+
+// ─── Supabase client (server-side) ───────────────────────────────────────────
+
+let _client: SupabaseClient | null = null;
+
+export function db(): SupabaseClient {
+  if (!_client) {
+    const url = process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    if (!url || !key) {
+      throw new Error(
+        "Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY environment variable.",
+      );
+    }
+    _client = createClient(url, key, { auth: { persistSession: false } });
+  }
+  return _client;
+}
+
+// ─── UUID generation ──────────────────────────────────────────────────────────
+
+import { randomUUID } from "crypto";
+
+export function newId(): string {
+  return randomUUID();
+}
+
+// ─── Validation ───────────────────────────────────────────────────────────────
+
+const REQUIRED_ENV = [
+  "SUPABASE_URL",
+  "SUPABASE_SERVICE_ROLE_KEY",
+  "CRON_SECRET",
+  "ENCRYPTION_KEY",
+  "NEXT_PUBLIC_APP_URL",
+] as const;
+
+export function validateEnv(): void {
+  const missing = REQUIRED_ENV.filter((k) => !process.env[k]);
+  if (missing.length) {
+    throw new Error(`Missing required env vars: ${missing.join(", ")}`);
   }
 }
 
-export async function writeDb(db: Db): Promise<void> {
-  await fs.writeFile(DB_PATH, JSON.stringify(db, null, 2));
-}
-
-export function newId(): string {
-  // ZOMBIE: guessable ids. Anyone can walk the list by trying id+1.
-  return String(Date.now());
+if (typeof window === "undefined") {
+  try { validateEnv(); } catch { /* allow local dev without all vars */ }
 }

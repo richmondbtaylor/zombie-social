@@ -1,23 +1,54 @@
 "use client";
-// ZOMBIE: there are no accounts. "Me" is just an id saved in this browser, picked from a dropdown.
-// Anyone can pretend to be anyone. Replace this with real sign-in (Supabase Auth, Clerk, Auth.js...).
+
+import { createBrowserClient } from "@supabase/ssr";
 import { useEffect, useState } from "react";
+import type { MemberRole } from "@/lib/db";
 
-const KEY = "zombie-social-me";
+// ─── Browser-side Supabase client ────────────────────────────────────────────
 
-export function setMe(id: string) {
-  localStorage.setItem(KEY, id);
-  window.dispatchEvent(new Event("me-changed"));
+export function supabaseBrowser() {
+  return createBrowserClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+  );
 }
 
-// Returns the current user's id, or null until the page has loaded.
-export function useMe(): string | null {
-  const [me, setMeState] = useState<string | null>(null);
+// ─── Current user info (replaces old localStorage-based useMe) ───────────────
+
+export interface MeInfo {
+  id: string;
+  workspaceId: string;
+  name: string;
+  email: string;
+  role: MemberRole;
+  deactivated: boolean;
+}
+
+export function useMe(): MeInfo | null {
+  const [me, setMe] = useState<MeInfo | null>(null);
+
   useEffect(() => {
-    const read = () => setMeState(localStorage.getItem(KEY));
-    read();
-    window.addEventListener("me-changed", read);
-    return () => window.removeEventListener("me-changed", read);
+    fetch("/api/me")
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.id) setMe(data);
+      })
+      .catch(() => {});
   }, []);
+
   return me;
+}
+
+// ─── Auth actions ────────────────────────────────────────────────────────────
+
+export async function signInWithEmail(email: string) {
+  const supabase = supabaseBrowser();
+  const { error } = await supabase.auth.signInWithOtp({ email });
+  if (error) throw error;
+}
+
+export async function signOut() {
+  const supabase = supabaseBrowser();
+  await supabase.auth.signOut();
+  window.location.href = "/auth/login";
 }

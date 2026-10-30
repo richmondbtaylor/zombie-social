@@ -1,0 +1,119 @@
+version: "3.8"
+
+services:
+  zombie_db:
+    image: public.ecr.aws/supabase/postgres:17.11.0.002
+    container_name: zombie_db
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:56322:5432"
+    environment:
+      POSTGRES_PASSWORD: zombiedbpass
+      POSTGRES_DB: postgres
+    volumes:
+      - zombie_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  zombie_auth:
+    image: public.ecr.aws/supabase/gotrue:v2.197.0
+    container_name: zombie_auth
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:56323:9999"
+    environment:
+      GOTRUE_API_HOST: 0.0.0.0
+      API_EXTERNAL_URL: http://localhost:56321
+      GOTRUE_DB_DRIVER: postgres
+      GOTRUE_DB_DATABASE_URL: postgres://postgres:zombiedbpass@zombie_db:5432/postgres?sslmode=disable
+      GOTRUE_SITE_URL: http://localhost:3111
+      GOTRUE_URI_ALLOW_LIST: "*"
+      GOTRUE_DISABLE_SIGNUP: "false"
+      GOTRUE_JWT_SECRET: zombie-jwt-secret-local-demo-change-in-production-32bytes
+      GOTRUE_JWT_EXP: 3600
+      GOTRUE_JWT_DEFAULT_GROUP_NAME: authenticated
+      GOTRUE_EXTERNAL_EMAIL_ENABLED: "true"
+      GOTRUE_MAILER_AUTOCONFIRM: "true"
+      GOTRUE_SMTP_ADMIN_EMAIL: admin@example.com
+      GOTRUE_SMTP_HOST: zombie_inbucket
+      GOTRUE_SMTP_PORT: "2500"
+      GOTRUE_SMTP_SENDER_NAME: admin
+    depends_on:
+      zombie_db:
+        condition: service_healthy
+
+  zombie_rest:
+    image: public.ecr.aws/supabase/postgrest:v14.18
+    container_name: zombie_rest
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:56324:3000"
+    environment:
+      PGRST_DB_URI: postgres://postgres:zombiedbpass@zombie_db:5432/postgres
+      PGRST_DB_SCHEMAS: public
+      PGRST_DB_ANON_ROLE: anon
+      PGRST_JWT_SECRET: zombie-jwt-secret-local-demo-change-in-production-32bytes
+      PGRST_DB_USE_LEGACY_GUCS: "false"
+    depends_on:
+      zombie_db:
+        condition: service_healthy
+
+  zombie_storage:
+    image: public.ecr.aws/supabase/storage-api:v1.80.2
+    container_name: zombie_storage
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:56325:5000"
+    environment:
+      ANON_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiJ9.zombie-local-demo-key
+      SERVICE_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoic2VydmljZV9yb2xlIn0.zombie-local-demo-key
+      TENANT_ID: zombie
+      REGION: local
+      GLOBAL_S3_BUCKET: zombie-storage
+      POSTGREST_URL: http://zombie_rest:3000
+      DATABASE_URL: postgres://postgres:zombiedbpass@zombie_db:5432/postgres
+      PGRST_JWT_SECRET: zombie-jwt-secret-local-demo-change-in-production-32bytes
+      FILE_SIZE_LIMIT: 262144000
+      STORAGE_BACKEND: file
+      FILE_STORAGE_BACKEND_PATH: /var/lib/storage
+    depends_on:
+      zombie_db:
+        condition: service_healthy
+      zombie_rest:
+        condition: service_started
+    volumes:
+      - zombie_storage_data:/var/lib/storage
+
+  zombie_kong:
+    image: public.ecr.aws/supabase/kong:2.8.1
+    container_name: zombie_kong
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:56321:8000"
+    environment:
+      KONG_DATABASE: "off"
+      KONG_DECLARATIVE_CONFIG: /kong.yml
+      KONG_DNS_ORDER: LAST,A,CNAME
+      KONG_PLUGINS: request-transformer,cors,key-auth,acl
+    volumes:
+      - ./kong.yml:/kong.yml:ro
+    depends_on:
+      - zombie_auth
+      - zombie_rest
+      - zombie_storage
+
+  zombie_inbucket:
+    image: inbucket/inbucket:3.0.4
+    container_name: zombie_inbucket
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:56327:9000"
+      - "127.0.0.1:56328:2500"
+      - "127.0.0.1:56329:1100"
+
+volumes:
+  zombie_postgres_data:
+  zombie_storage_data:

@@ -1,46 +1,45 @@
-"use client";
-import { useEffect, useState } from "react";
+import { getAuthMember } from "@/lib/auth";
+import { canExport } from "@/lib/rbac";
+import { computeAnalytics } from "@/lib/analytics";
 import { PLATFORM_NAMES } from "@/lib/channels";
-import type { Platform } from "@/lib/db";
+import type { MemberRole } from "@/lib/db";
+import AnalyticsControls from "@/components/AnalyticsControls";
 
-type Row = { channelId: string; platform: Platform; followers: number; posts: number; impressions: number; likes: number; comments: number; shares: number; clicks: number; engagementRate: number };
-type Data = {
-  totals: { impressions: number; likes: number; comments: number; shares: number; clicks: number; posts: number; avgImpressions: number };
-  perChannel: Row[];
-  topPost: { id: string; text: string } | null;
-};
+export const dynamic = "force-dynamic";
 
-export default function AnalyticsPage() {
-  const [data, setData] = useState<Data | null>(null);
-  const [msg, setMsg] = useState("");
-
-  useEffect(() => { fetch("/api/analytics").then((r) => r.json()).then(setData); }, []);
-
-  async function exportCsv() {
-    const res = await fetch("/api/analytics/export");
-    const body = await res.json();
-    setMsg(body.error ?? "");
+export default async function AnalyticsPage() {
+  const me = await getAuthMember();
+  if (!me) {
+    return (
+      <div className="card">
+        <strong>Not signed in.</strong>
+        <p className="muted">Run the app with DEMO_MODE=1 to use the demo workspace.</p>
+      </div>
+    );
   }
 
-  if (!data) return <p className="muted">Loading...</p>;
+  const data = await computeAnalytics(me.workspaceId);
   const t = data.totals;
+
   return (
     <>
       <div className="page-head">
         <div>
           <h1>Analytics</h1>
-          <p className="sub">Fake numbers from the seed file. Nothing is pulled from the real platforms.</p>
+          <p className="sub">Engagement across your connected channels. Engagement rate = engagements ÷ impressions.</p>
         </div>
-        <button className="ghost" onClick={exportCsv}>Export CSV</button>
       </div>
-      {msg && <p className="error">{msg}</p>}
+
       <div className="stats">
         <div className="stat"><span className="stat-num">{t.posts}</span><span className="stat-label">Published posts</span></div>
         <div className="stat"><span className="stat-num">{t.impressions.toLocaleString()}</span><span className="stat-label">Impressions</span></div>
-        <div className="stat"><span className="stat-num">{t.avgImpressions.toLocaleString()}</span><span className="stat-label">Avg impressions per post</span></div>
+        <div className="stat"><span className="stat-num">{t.avgImpressions.toLocaleString()}</span><span className="stat-label">Avg impressions / post</span></div>
         <div className="stat"><span className="stat-num">{(t.likes + t.comments + t.shares).toLocaleString()}</span><span className="stat-label">Likes, comments, shares</span></div>
         <div className="stat"><span className="stat-num">{t.clicks.toLocaleString()}</span><span className="stat-label">Link clicks</span></div>
       </div>
+
+      <AnalyticsControls canExport={canExport(me.role as MemberRole)} sponsored={data.sponsoredVsOrganic.sponsored} organic={data.sponsoredVsOrganic.organic} />
+
       <div className="table-wrap">
         <table>
           <thead>
@@ -63,6 +62,7 @@ export default function AnalyticsPage() {
           </tbody>
         </table>
       </div>
+
       {data.topPost && (
         <>
           <h2>Top post</h2>
