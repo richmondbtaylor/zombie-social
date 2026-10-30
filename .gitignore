@@ -3,6 +3,9 @@ node_modules/
 out/
 next-env.d.ts
 *.tsbuildinfo
+data/db.json
+.DS_Store
+supabase/.temp/
 .env
 .env.local
 data/db.json
