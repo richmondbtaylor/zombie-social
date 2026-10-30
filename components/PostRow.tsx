@@ -1,7 +1,8 @@
 "use client";
 import { useState } from "react";
-import type { Channel, MemberRole, Post } from "@/lib/db";
+import type { ChannelPublic, MemberRole, Post } from "@/lib/db";
 import { PLATFORM_NAMES } from "@/lib/channels";
+import PlatformIcon from "@/components/PlatformIcon";
 import { useRouter } from "next/navigation";
 
 export function fmtTime(s: string | null): string {
@@ -9,7 +10,7 @@ export function fmtTime(s: string | null): string {
   return new Date(s).toLocaleString([], { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 }
 
-interface Props { post: Post; channels: Channel[]; role: MemberRole; onChange: () => void }
+interface Props { post: Post; channels: ChannelPublic[]; role: MemberRole; onChange: () => void }
 
 export default function PostRow({ post, channels, role, onChange }: Props) {
   const router = useRouter();
@@ -20,7 +21,7 @@ export default function PostRow({ post, channels, role, onChange }: Props) {
   const [rewriting, setRewriting] = useState(false);
 
   const canEdit = role === "owner" || role === "editor";
-  const names = post.channelIds.map((id) => channels.find((c) => c.id === id)).filter(Boolean) as Channel[];
+  const names = post.channelIds.map((id) => channels.find((c) => c.id === id)).filter(Boolean) as ChannelPublic[];
   const failedResults = (post.results ?? []).filter((r) => r.status === "failed" || r.status === "rate_limited");
 
   async function publishNow() {
@@ -102,14 +103,15 @@ export default function PostRow({ post, channels, role, onChange }: Props) {
   }
 
   return (
-    <div className="card stack">
-      <div className="row" style={{ justifyContent: "space-between" }}>
+    <div className="card post-row">
+      <div className="row" style={{ justifyContent: "space-between", marginBottom: 6 }}>
         <span className="muted small">{fmtTime(post.scheduledAtUtc)}</span>
-        <span className={`pill status-${post.status}`}>{post.status}</span>
+        <span className={`pill status-${post.status}`}>{post.status.replace(/_/g, " ")}</span>
       </div>
-      {!rewrite && <div>{post.text}</div>}
+
+      {!rewrite && <div className="post-text">{post.text}</div>}
       {rewrite && (
-        <div className="card" style={{ background: "var(--lavender)" }}>
+        <div className="rewrite-preview">
           <div className="muted small" style={{ marginBottom: 6 }}>AI rewrite · {rewrite.tone}</div>
           <div style={{ whiteSpace: "pre-wrap" }}>{rewrite.text}</div>
           <div className="row" style={{ marginTop: 8 }}>
@@ -118,11 +120,21 @@ export default function PostRow({ post, channels, role, onChange }: Props) {
           </div>
         </div>
       )}
-      {post.imageUrl && <div className="muted small">Image: {post.imageUrl}</div>}
-      <div className="row">
-        {names.map((c) => <span key={c.id} className="pill">{PLATFORM_NAMES[c.platform]}</span>)}
+
+      {post.imageUrl && (
+        <div className="row" style={{ marginTop: 6 }}>
+          <img src={post.imageUrl} alt="" style={{ width: 48, height: 48, objectFit: "cover", borderRadius: 8 }} />
+        </div>
+      )}
+
+      <div className="row" style={{ marginTop: 6 }}>
+        {names.map((c) => (
+          <span key={c.id} className="channel-tag">
+            <PlatformIcon platform={c.platform} size={13} />
+            {PLATFORM_NAMES[c.platform]}
+          </span>
+        ))}
         {post.sponsored && <span className="pill status-sponsored">sponsored</span>}
-        {post.status === "approved" && <span className="pill" onClick={edit} style={{ cursor: "pointer" }}>Re-approval required</span>}
       </div>
 
       {failedResults.length > 0 && (
@@ -135,7 +147,7 @@ export default function PostRow({ post, channels, role, onChange }: Props) {
       ))}
 
       {canEdit && (
-        <div className="row">
+        <div className="row" style={{ marginTop: 10 }}>
           {post.status === "draft" && (
             <>
               <input type="datetime-local" value={when} onChange={(e) => setWhen(e.target.value)} style={{ width: "auto" }} />
@@ -153,21 +165,21 @@ export default function PostRow({ post, channels, role, onChange }: Props) {
             <button className="small-btn ghost" onClick={submitReview}>Submit for review</button>
           )}
           {!rewrite && (
-            <>
+            <div className="row ai-actions">
               <button className="small-btn ghost" disabled={rewriting} onClick={() => rewriteTone("conversational")}>💬 Rewrite</button>
               <button className="small-btn ghost" disabled={rewriting} onClick={() => rewriteTone("informal")}>😄</button>
               <button className="small-btn ghost" disabled={rewriting} onClick={() => rewriteTone("professional")}>👔</button>
-            </>
+            </div>
           )}
           {["draft", "scheduled", "failed", "rejected"].includes(post.status) && (
-            <button className="small-btn ghost" onClick={remove}>Delete</button>
+            <button className="small-btn ghost danger" onClick={remove}>Delete</button>
           )}
         </div>
       )}
       {!canEdit && (
-        <div className="muted small">View-only access — actions hidden.</div>
+        <div className="muted small" style={{ marginTop: 8 }}>View-only access — actions hidden.</div>
       )}
-      {msg && <div className="error">{msg}</div>}
+      {msg && <div className="error" style={{ marginTop: 6 }}>{msg}</div>}
     </div>
   );
 }

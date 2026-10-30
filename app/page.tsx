@@ -1,139 +1,87 @@
-"use client";
-import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
-import type { Channel, Post } from "@/lib/db";
-import PostRow from "@/components/PostRow";
-import { useMe } from "@/lib/useMe";
-import { PLATFORM_NAMES, PLATFORM_COLORS } from "@/lib/channels";
+import { db } from "@/lib/db";
+import { getAuthMember } from "@/lib/auth";
+import type { ChannelPublic, Platform, Post } from "@/lib/db";
+import QueueClient from "@/components/QueueClient";
 
-const PAGE_SIZE = 20;
-type Tab = "scheduled" | "history";
-type Filter = { platform: string; status: string };
+export const dynamic = "force-dynamic";
 
-export default function QueuePage() {
-  const me = useMe();
-  const router = useRouter();
-  const [posts, setPosts] = useState<Post[]>([]);
-  const [channels, setChannels] = useState<Channel[]>([]);
-  const [loaded, setLoaded] = useState(false);
-  const [tab, setTab] = useState<Tab>("scheduled");
-  const [filter, setFilter] = useState<Filter>({ platform: "", status: "" });
-  const [historyPage, setHistoryPage] = useState(1);
+function toChannel(c: Record<string, unknown>): ChannelPublic {
+  return {
+    id: c.id as string,
+    workspaceId: c.workspace_id as string,
+    platform: c.platform as Platform,
+    name: c.name as string,
+    handle: c.handle as string,
+    followers: c.followers as number,
+    connected: c.connected as boolean,
+    frozen: c.frozen as boolean,
+    tokenExpiresAt: (c.token_expires_at as string) ?? null,
+    lastRateLimitReset: (c.last_rate_limit_reset as string) ?? null,
+  };
+}
 
-  const load = useCallback(async () => {
-    const [p, c] = await Promise.all([
-      fetch("/api/posts").then((r) => (r.ok ? r.json() : [])),
-      fetch("/api/channels").then((r) => (r.ok ? r.json() : [])),
-    ]);
-    setPosts(Array.isArray(p) ? p : []);
-    setChannels(Array.isArray(c) ? c : []);
-    setLoaded(true);
-  }, []);
-  useEffect(() => { load(); }, [load]);
-
-  // Deactivated account → force re-auth.
-  useEffect(() => {
-    if (me && me.deactivated) router.push("/auth/login?deactivated=1");
-  }, [me, router]);
-
-  const ACTIVE = new Set(["scheduled", "publishing", "processing"]);
-  const HISTORY = new Set(["published", "partially_published", "partially_failed", "failed"]);
-
-  const withFilters = (list: Post[]) =>
-    list.filter((p) => {
-      if (filter.platform && !p.channelIds.some((id) => {
-        const c = channels.find((x) => x.id === id);
-        return c?.platform === filter.platform;
-      })) return false;
-      if (filter.status && p.status !== filter.status) return false;
-      return true;
-    });
-
-  // Scheduled tab: soonest first (ascending).
-  const scheduledList = withFilters(
-    posts.filter((p) => ACTIVE.has(p.status)).sort((a, b) =>
-      (a.scheduledAtUtc ?? "").localeCompare(b.scheduledAtUtc ?? "")),
-  );
-
-  // History tab: newest first (descending), cursor-paginated 20 per batch.
-  const historyAll = withFilters(
-    posts.filter((p) => HISTORY.has(p.status)).sort((a, b) =>
-      (b.scheduledAtUtc ?? "").localeCompare(a.scheduledAtUtc ?? "")),
-  );
-  const historyList = historyAll.slice(0, historyPage * PAGE_SIZE);
-  const hasMore = historyAll.length > historyList.length;
-
-  const scheduledCount = posts.filter((p) => ACTIVE.has(p.status)).length;
-  const draftCount = posts.filter((p) => p.status === "draft").length;
-  const publishedCount = posts.filter((p) => HISTORY.has(p.status)).length;
-
-  const platforms = Array.from(new Set(channels.map((c) => c.platform)));
-  const statuses = tab === "scheduled"
-    ? ["scheduled", "publishing", "processing"]
-    : ["published", "partially_published", "partially_failed", "failed"];
-
-  return (
-    <>
-      <div className="page-head">
-        <div>
-          <h1>Queue</h1>
-          <p className="sub">Every post that is scheduled, published or failed.</p>
-        </div>
-        <Link href="/compose" className="btn">New post</Link>
+export default async function QueuePage() {
+  const me = await getAuthMember();
+  if (!me) {
+    return (
+      <div className="card">
+        <strong>Not signed in.</strong>
+        <p className="muted">Run the app with DEMO_MODE=1 to use the demo workspace.</p>
       </div>
+    );
+  }
 
-      <div className="stats">
-        <div className="stat"><span className="stat-num">{scheduledCount}</span><span className="stat-label">Scheduled</span></div>
-        <div className="stat"><span className="stat-num">{draftCount}</span><span className="stat-label">Drafts</span></div>
-        <div className="stat"><span className="stat-num">{publishedCount}</span><span className="stat-label">Published / Failed</span></div>
-      </div>
+  const [{ data: postsData }, { data: channelsData }] = await Promise.all([
+    db().from("posts").select("*").eq("workspace_id", me.workspaceId).order("scheduled_at"),
+    db().from("channels").select("*").eq("workspace_id", me.workspaceId).order("platform"),
+  ]);
 
-      <div className="row" style={{ marginBottom: 12 }}>
-        <button className={tab === "scheduled" ? "" : "ghost small-btn"} onClick={() => setTab("scheduled")}>Scheduled</button>
-        <button className={tab === "history" ? "" : "ghost small-btn"} onClick={() => setTab("history")}>Published / Failed</button>
-      </div>
+  // Fetch post_results for each post so the row can show channel errors.
+  const postIds = (postsData ?? []).map((p) => p.id as string);
+  const { data: resultsData } = postIds.length
+    ? await db().from("post_results").select("*").in("post_id", postIds)
+    : { data: [] };
 
-      <div className="row" style={{ marginBottom: 16 }}>
-        {platforms.map((p) => (
-          <button
-            key={p}
-            className={filter.platform === p ? "small-btn" : "ghost small-btn"}
-            onClick={() => setFilter((f) => ({ ...f, platform: f.platform === p ? "" : p }))}
-          >
-            <span className="dot" style={{ background: PLATFORM_COLORS[p], marginRight: 6 }} />
-            {PLATFORM_NAMES[p]}
-          </button>
-        ))}
-        {statuses.map((s) => (
-          <button
-            key={s}
-            className={filter.status === s ? "small-btn" : "ghost small-btn"}
-            onClick={() => setFilter((f) => ({ ...f, status: f.status === s ? "" : s }))}
-          >
-            {s}
-          </button>
-        ))}
-      </div>
+  const channels = (channelsData ?? []).map(toChannel);
 
-      {loaded && (tab === "scheduled" ? scheduledList : historyList).length === 0 && (
-        <div className="card empty">
-          <strong>{tab === "scheduled" ? "Nothing scheduled." : "No history yet."}</strong>
-          <Link href="/compose" className="btn">Write a post</Link>
-        </div>
-      )}
+  const posts: Post[] = (postsData ?? []).map((p) => ({
+    id: p.id as string,
+    workspaceId: p.workspace_id as string,
+    text: p.text as string,
+    channelIds: (p.channel_ids as string[]) ?? [],
+    scheduledAtUtc: (p.scheduled_at as string) ?? null,
+    timezone: p.timezone as string,
+    status: p.status as Post["status"],
+    imageUrl: p.image_url as string,
+    videoUrl: (p.video_url as string) ?? null,
+    sponsored: p.sponsored as boolean,
+    inReview: p.in_review as boolean,
+    lockedAt: (p.locked_at as string) ?? null,
+    version: p.version as number,
+    createdBy: p.created_by as string,
+    createdAt: p.created_at as string,
+    updatedAt: p.updated_at as string,
+    results: (resultsData ?? [])
+      .filter((r) => r.post_id === p.id)
+      .map((r) => ({
+        id: r.id as string,
+        postId: r.post_id as string,
+        channelId: r.channel_id as string,
+        externalPostId: (r.external_post_id as string) ?? null,
+        postUrl: (r.post_url as string) ?? null,
+        status: r.status as "pending" | "success" | "failed" | "rate_limited",
+        errorMessage: (r.error_message as string) ?? null,
+        retryCount: (r.retry_count as number) ?? 0,
+        nextRetryAt: (r.next_retry_at as string) ?? null,
+        impressions: (r.impressions as number) ?? 0,
+        likes: (r.likes as number) ?? 0,
+        comments: (r.comments as number) ?? 0,
+        shares: (r.shares as number) ?? 0,
+        clicks: (r.clicks as number) ?? 0,
+        extraMetrics: (r.extra_metrics as Record<string, unknown>) ?? null,
+        syncedAt: (r.synced_at as string) ?? null,
+      })),
+  }));
 
-      <div className="list">
-        {(tab === "scheduled" ? scheduledList : historyList).map((p) => (
-          <PostRow key={p.id} post={p} channels={channels} role={me?.role ?? "viewer"} onChange={load} />
-        ))}
-      </div>
-
-      {tab === "history" && hasMore && (
-        <button className="ghost" onClick={() => setHistoryPage((n) => n + 1)} style={{ marginTop: 12 }}>
-          Load {Math.min(PAGE_SIZE, historyAll.length - historyList.length)} more
-        </button>
-      )}
-    </>
-  );
+  return <QueueClient initialPosts={posts} initialChannels={channels} role={me.role} />;
 }

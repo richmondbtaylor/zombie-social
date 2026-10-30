@@ -246,4 +246,103 @@ th {
 .error-badge { color: var(--danger); font-size: 12px; font-weight: 600; cursor: pointer; user-select: none; }
 
 /* ---- AI writer panel ---- */
-.ai-panel { border: 1px dashed var(--line); border-radius: 10px; padding: 12px; }
+.ai-panel { border: 1px dashed var(--line); border-radius: 10px; padding: 12px; background: linear-gradient(135deg, #FAF9FF, #F3F0FE); }
+.ai-panel strong { font-size: 14px; color: var(--accent); }
+
+/* ---- Channel cards (grid) ---- */
+.channel-grid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); margin-bottom: 28px; }
+.channel-card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-top: 3px solid var(--line);
+  border-radius: 16px;
+  padding: 16px;
+  box-shadow: 0 6px 18px rgba(10, 20, 32, .05);
+  transition: transform .15s ease, box-shadow .15s ease;
+}
+.channel-card:hover { transform: translateY(-2px); box-shadow: 0 10px 28px rgba(10, 20, 32, .09); }
+.channel-card-head { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+.channel-card-head strong { font-size: 16px; }
+.channel-card-body { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
+
+/* ---- Connect buttons grid ---- */
+.connect-grid { display: grid; gap: 10px; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); }
+.connect-btn {
+  display: flex; align-items: center; gap: 8px;
+  padding: 12px 16px;
+  background: #fff;
+  border: 1.5px solid var(--line);
+  border-radius: 12px;
+  font-weight: 600; font-size: 14px; color: var(--ink);
+  cursor: pointer;
+  transition: border-color .15s, background .15s;
+}
+.connect-btn:hover:not(:disabled) { border-color: var(--pc, var(--accent)); background: #FAFAFF; }
+.connect-btn:disabled { opacity: .45; cursor: not-allowed; }
+.connect-btn svg { color: var(--pc, var(--ink)); }
+
+/* ---- Modal overlay ---- */
+.modal-overlay {
+  position: fixed; inset: 0; z-index: 100;
+  background: rgba(13, 11, 25, .45);
+  display: flex; align-items: center; justify-content: center;
+  padding: 20px;
+}
+.modal {
+  background: var(--card);
+  border-radius: 20px;
+  padding: 24px;
+  width: 100%; max-width: 420px;
+  box-shadow: 0 24px 64px rgba(13, 11, 25, .2);
+  display: grid; gap: 12px;
+}
+
+/* ---- Filter chips (queue page) ---- */
+.filter-row { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+.filter-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 6px 14px;
+  background: #fff;
+  border: 1.5px solid var(--line);
+  border-radius: 99px;
+  font-size: 13px; font-weight: 500; color: var(--muted);
+  cursor: pointer;
+  transition: all .15s;
+}
+.filter-chip:hover { border-color: var(--accent); color: var(--accent); }
+.filter-chip.active { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); font-weight: 600; }
+
+/* ---- Post row polish ---- */
+.post-row { display: grid; gap: 2px; }
+.post-text { font-size: 15px; line-height: 1.5; white-space: pre-wrap; }
+.rewrite-preview { background: var(--accent-soft); border-radius: 12px; padding: 14px; margin: 4px 0; }
+.channel-tag {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 12px; font-weight: 600;
+  padding: 3px 10px; border-radius: 99px;
+  background: #f4f3fa; color: var(--muted);
+}
+.ai-actions { margin-left: auto; }
+button.danger { color: var(--danger); }
+button.danger:hover { background: #fbe4e2; }
+
+/* ---- Compose page polish ---- */
+.compose-layout { display: grid; gap: 20px; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); align-items: start; }
+@media (max-width: 760px) { .compose-layout { grid-template-columns: minmax(0, 1fr); } }
+.char-counter-bar { height: 4px; border-radius: 2px; background: var(--line); overflow: hidden; margin-top: 4px; }
+.char-counter-fill { height: 100%; border-radius: 2px; background: var(--accent); transition: width .2s; }
+.char-counter-fill.over { background: var(--danger); }
+
+/* ---- Channel toggle chips (compose) ---- */
+.channel-toggle {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 8px 14px;
+  background: #fff;
+  border: 1.5px solid var(--line);
+  border-radius: 99px;
+  font-size: 13px; font-weight: 500; color: var(--ink);
+  cursor: pointer;
+  transition: all .15s;
+}
+.channel-toggle:hover:not(:disabled) { border-color: var(--accent); }
+.channel-toggle.active { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); font-weight: 600; }

@@ -42,7 +42,7 @@ export default async function ChannelsPage() {
       <div className="page-head">
         <div>
           <h1>Channels</h1>
-          <p className="sub">Your connected social accounts. Reconnect any that have expired tokens.</p>
+          <p className="sub">Connect your social accounts. Posts go out through whatever is connected.</p>
         </div>
       </div>
       <ChannelsClient initialChannels={channels} role={me.role} />

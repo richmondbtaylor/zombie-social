@@ -1,42 +1,56 @@
-"use client";
-import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
-import type { Channel, Post } from "@/lib/db";
-import PostRow from "@/components/PostRow";
-import { useMe } from "@/lib/useMe";
+import { db } from "@/lib/db";
+import { getAuthMember } from "@/lib/auth";
+import type { ChannelPublic, Platform, Post } from "@/lib/db";
+import DraftsClient from "@/components/DraftsClient";
 
-export default function DraftsPage() {
-  const me = useMe();
-  const [posts, setPosts] = useState<Post[]>([]);
-  const [channels, setChannels] = useState<Channel[]>([]);
-  const [loaded, setLoaded] = useState(false);
+export const dynamic = "force-dynamic";
 
-  const load = useCallback(async () => {
-    const [p, c] = await Promise.all([
-      fetch("/api/posts").then((r) => (r.ok ? r.json() : [])),
-      fetch("/api/channels").then((r) => (r.ok ? r.json() : [])),
-    ]);
-    setPosts(Array.isArray(p) ? p : []);
-    setChannels(Array.isArray(c) ? c : []);
-    setLoaded(true);
-  }, []);
-  useEffect(() => { load(); }, [load]);
+function toChannel(c: Record<string, unknown>): ChannelPublic {
+  return {
+    id: c.id as string, workspaceId: c.workspace_id as string, platform: c.platform as Platform,
+    name: c.name as string, handle: c.handle as string, followers: c.followers as number,
+    connected: c.connected as boolean, frozen: c.frozen as boolean,
+    tokenExpiresAt: (c.token_expires_at as string) ?? null,
+    lastRateLimitReset: (c.last_rate_limit_reset as string) ?? null,
+  };
+}
 
-  const drafts = posts.filter((p) => p.status === "draft" || p.status === "pending_review" || p.status === "rejected");
+export default async function DraftsPage() {
+  const me = await getAuthMember();
+  if (!me) {
+    return <div className="card"><strong>Not signed in.</strong><p className="muted">Run with DEMO_MODE=1 for the demo workspace.</p></div>;
+  }
 
-  return (
-    <>
-      <div className="page-head">
-        <div>
-          <h1>Drafts</h1>
-          <p className="sub">Posts that are not scheduled yet. Submit for review or pick a time to schedule.</p>
-        </div>
-        {me?.role !== "viewer" && <Link href="/compose" className="btn">New post</Link>}
-      </div>
-      {loaded && drafts.length === 0 && <div className="card empty"><strong>No drafts.</strong></div>}
-      <div className="list">
-        {drafts.map((p) => <PostRow key={p.id} post={p} channels={channels} role={me?.role ?? "viewer"} onChange={load} />)}
-      </div>
-    </>
-  );
+  const [{ data: postsData }, { data: channelsData }] = await Promise.all([
+    db().from("posts").select("*").eq("workspace_id", me.workspaceId).order("created_at"),
+    db().from("channels").select("*").eq("workspace_id", me.workspaceId).order("platform"),
+  ]);
+
+  const postIds = (postsData ?? []).map((p) => p.id as string);
+  const { data: resultsData } = postIds.length
+    ? await db().from("post_results").select("*").in("post_id", postIds)
+    : { data: [] };
+
+  const channels = (channelsData ?? []).map(toChannel);
+  const posts: Post[] = (postsData ?? []).map((p) => ({
+    id: p.id as string, workspaceId: p.workspace_id as string, text: p.text as string,
+    channelIds: (p.channel_ids as string[]) ?? [], scheduledAtUtc: (p.scheduled_at as string) ?? null,
+    timezone: p.timezone as string, status: p.status as Post["status"],
+    imageUrl: p.image_url as string, videoUrl: (p.video_url as string) ?? null,
+    sponsored: p.sponsored as boolean, inReview: p.in_review as boolean,
+    lockedAt: (p.locked_at as string) ?? null, version: p.version as number,
+    createdBy: p.created_by as string, createdAt: p.created_at as string, updatedAt: p.updated_at as string,
+    results: (resultsData ?? []).filter((r) => r.post_id === p.id).map((r) => ({
+      id: r.id as string, postId: r.post_id as string, channelId: r.channel_id as string,
+      externalPostId: (r.external_post_id as string) ?? null, postUrl: (r.post_url as string) ?? null,
+      status: r.status as "pending" | "success" | "failed" | "rate_limited",
+      errorMessage: (r.error_message as string) ?? null,
+      retryCount: (r.retry_count as number) ?? 0, nextRetryAt: (r.next_retry_at as string) ?? null,
+      impressions: (r.impressions as number) ?? 0, likes: (r.likes as number) ?? 0,
+      comments: (r.comments as number) ?? 0, shares: (r.shares as number) ?? 0, clicks: (r.clicks as number) ?? 0,
+      extraMetrics: (r.extra_metrics as Record<string, unknown>) ?? null, syncedAt: (r.synced_at as string) ?? null,
+    })),
+  }));
+
+  return <DraftsClient initialPosts={posts} initialChannels={channels} role={me.role} />;
 }

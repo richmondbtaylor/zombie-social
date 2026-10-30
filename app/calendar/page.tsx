@@ -1,122 +1,56 @@
-"use client";
-import { useEffect, useState } from "react";
-import type { Channel, Post } from "@/lib/db";
-import { PLATFORM_COLORS, PLATFORM_NAMES } from "@/lib/channels";
-import { useMe } from "@/lib/useMe";
+import { db } from "@/lib/db";
+import { getAuthMember } from "@/lib/auth";
+import type { ChannelPublic, Platform, Post } from "@/lib/db";
+import CalendarClient from "@/components/CalendarClient";
 
-function localDateKey(d: Date): string {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
+export const dynamic = "force-dynamic";
+
+function toChannel(c: Record<string, unknown>): ChannelPublic {
+  return {
+    id: c.id as string, workspaceId: c.workspace_id as string, platform: c.platform as Platform,
+    name: c.name as string, handle: c.handle as string, followers: c.followers as number,
+    connected: c.connected as boolean, frozen: c.frozen as boolean,
+    tokenExpiresAt: (c.token_expires_at as string) ?? null,
+    lastRateLimitReset: (c.last_rate_limit_reset as string) ?? null,
+  };
 }
 
-function weekDays(offsetWeeks: number): string[] {
-  const now = new Date();
-  const monday = new Date(now);
-  const dow = (now.getDay() + 6) % 7;
-  monday.setDate(now.getDate() - dow + offsetWeeks * 7);
-  return Array.from({ length: 7 }, (_, i) => {
-    const d = new Date(monday);
-    d.setDate(monday.getDate() + i);
-    return localDateKey(d);
-  });
-}
-
-export default function CalendarPage() {
-  const me = useMe();
-  const [offset, setOffset] = useState(0);
-  const [posts, setPosts] = useState<Post[]>([]);
-  const [channels, setChannels] = useState<Channel[]>([]);
-  const [dragPost, setDragPost] = useState<Post | null>(null);
-  const [tz] = useState(() => Intl.DateTimeFormat().resolvedOptions().timeZone);
-
-  useEffect(() => {
-    fetch("/api/posts").then((r) => (r.ok ? r.json() : [])).then(setPosts);
-    fetch("/api/channels").then((r) => (r.ok ? r.json() : [])).then(setChannels);
-  }, []);
-
-  const days = weekDays(offset);
-  const label = (iso: string) =>
-    new Date(iso + "T12:00").toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" });
-
-  function localDayOf(scheduledAtUtc: string | null): string | null {
-    if (!scheduledAtUtc) return null;
-    return localDateKey(new Date(scheduledAtUtc));
+export default async function CalendarPage() {
+  const me = await getAuthMember();
+  if (!me) {
+    return <div className="card"><strong>Not signed in.</strong><p className="muted">Run with DEMO_MODE=1 for the demo workspace.</p></div>;
   }
 
-  async function drop(day: string) {
-    if (!dragPost) return;
-    const oldDate = dragPost.scheduledAtUtc ? new Date(dragPost.scheduledAtUtc) : null;
-    const timePart = oldDate ? `${String(oldDate.getUTCHours()).padStart(2, "0")}:${String(oldDate.getUTCMinutes()).padStart(2, "0")}` : "09:00";
-    const [y, m, d] = day.split("-").map(Number);
-    const target = new Date(Date.UTC(y, m - 1, d, 0, 0, 0));
-    const [h, min] = timePart.split(":").map(Number);
-    target.setUTCHours(h, min);
-    await fetch(`/api/posts/${dragPost.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ scheduledAt: target.toISOString(), version: dragPost.version }),
-    });
-    setDragPost(null);
-    fetch("/api/posts").then((r) => r.json()).then(setPosts);
-  }
+  const [{ data: postsData }, { data: channelsData }] = await Promise.all([
+    db().from("posts").select("*").eq("workspace_id", me.workspaceId).order("scheduled_at"),
+    db().from("channels").select("*").eq("workspace_id", me.workspaceId).order("platform"),
+  ]);
 
-  return (
-    <>
-      <div className="page-head">
-        <div>
-          <h1>Calendar</h1>
-          <p className="sub">One week at a time. Drafts without a date are not shown. Drag to reschedule.</p>
-        </div>
-        <div className="row">
-          <span className="muted small">Timezone: {tz}</span>
-          <button className="ghost small-btn" onClick={() => setOffset(offset - 1)}>Previous week</button>
-          <button className="ghost small-btn" onClick={() => setOffset(0)}>This week</button>
-          <button className="ghost small-btn" onClick={() => setOffset(offset + 1)}>Next week</button>
-        </div>
-      </div>
-      <div className="week">
-        {days.map((day) => {
-          const todays = posts
-            .filter((p) => p.status !== "draft" && localDayOf(p.scheduledAtUtc) === day)
-            .sort((a, b) => (a.scheduledAtUtc ?? "").localeCompare(b.scheduledAtUtc ?? ""));
-          const MAX_VISIBLE = 4;
-          const visible = todays.slice(0, MAX_VISIBLE);
-          const extra = todays.length - MAX_VISIBLE;
-          return (
-            <div
-              key={day}
-              className="day"
-              onDragOver={(e) => e.preventDefault()}
-              onDrop={() => drop(day)}
-            >
-              <div className="day-head">{label(day)}</div>
-              {todays.length === 0 && <div className="muted small">Nothing</div>}
-              {visible.map((p) => (
-                <div
-                  key={p.id}
-                  className="slot"
-                  draggable={me?.role !== "viewer"}
-                  onDragStart={() => setDragPost(p)}
-                >
-                  <div className="small muted">
-                    {p.scheduledAtUtc ? new Date(p.scheduledAtUtc).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : "—"} · {p.status}
-                  </div>
-                  <div className="slot-text">{p.text}</div>
-                  <div className="row" style={{ gap: 4 }}>
-                    {p.channelIds.map((id) => {
-                      const c = channels.find((x) => x.id === id);
-                      return c ? <span key={id} className="dot" title={PLATFORM_NAMES[c.platform]} style={{ background: PLATFORM_COLORS[c.platform] }} /> : null;
-                    })}
-                  </div>
-                </div>
-              ))}
-              {extra > 0 && <div className="muted small">+{extra} more</div>}
-            </div>
-          );
-        })}
-      </div>
-    </>
-  );
+  const postIds = (postsData ?? []).map((p) => p.id as string);
+  const { data: resultsData } = postIds.length
+    ? await db().from("post_results").select("*").in("post_id", postIds)
+    : { data: [] };
+
+  const channels = (channelsData ?? []).map(toChannel);
+  const posts: Post[] = (postsData ?? []).map((p) => ({
+    id: p.id as string, workspaceId: p.workspace_id as string, text: p.text as string,
+    channelIds: (p.channel_ids as string[]) ?? [], scheduledAtUtc: (p.scheduled_at as string) ?? null,
+    timezone: p.timezone as string, status: p.status as Post["status"],
+    imageUrl: p.image_url as string, videoUrl: (p.video_url as string) ?? null,
+    sponsored: p.sponsored as boolean, inReview: p.in_review as boolean,
+    lockedAt: (p.locked_at as string) ?? null, version: p.version as number,
+    createdBy: p.created_by as string, createdAt: p.created_at as string, updatedAt: p.updated_at as string,
+    results: (resultsData ?? []).filter((r) => r.post_id === p.id).map((r) => ({
+      id: r.id as string, postId: r.post_id as string, channelId: r.channel_id as string,
+      externalPostId: (r.external_post_id as string) ?? null, postUrl: (r.post_url as string) ?? null,
+      status: r.status as "pending" | "success" | "failed" | "rate_limited",
+      errorMessage: (r.error_message as string) ?? null,
+      retryCount: (r.retry_count as number) ?? 0, nextRetryAt: (r.next_retry_at as string) ?? null,
+      impressions: (r.impressions as number) ?? 0, likes: (r.likes as number) ?? 0,
+      comments: (r.comments as number) ?? 0, shares: (r.shares as number) ?? 0, clicks: (r.clicks as number) ?? 0,
+      extraMetrics: (r.extra_metrics as Record<string, unknown>) ?? null, syncedAt: (r.synced_at as string) ?? null,
+    })),
+  }));
+
+  return <CalendarClient initialPosts={posts} initialChannels={channels} role={me.role} />;
 }
